@@ -1,0 +1,99 @@
+- hosts: all 
+  become: true
+  tasks: 
+  - name: Remove old version docker
+    dnf:
+      name: "{{ packages }}"
+      state: absent  
+    vars:
+      packages:
+      - docker 
+      - docker-client 
+      - docker-client-latest 
+      - docker-common 
+      - docker-latest 
+      - docker-latest-logrotate 
+      - docker-logrotate 
+      - docker-selinux 
+      - docker-engine-selinux 
+      - docker-engine  
+
+  - name: Autoremove unneeded packages installed as dependencies
+    dnf:
+      autoremove: yes
+  - name: upgrade all packages
+    dnf:
+      name: "*"
+      state: latest  
+  - name: Install the 'Development tools' package group
+    dnf:
+        name: '@Development Tools'
+        state: present
+  - name: Install pre requisites for Harbor (openssl)
+    dnf: 
+      name: "{{ packages }}"
+      state: present
+    vars: 
+      packages:
+      - openssl
+      - wget
+
+
+  - name: Install pre requisites for Harbor(docker)
+    dnf: 
+      name: dnf-plugins-core
+      state: present
+  
+  - name: Add repository docker
+    become: true
+    command: dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo
+
+  - name: upgrade all packages
+    dnf:
+      name: "*"
+      state: latest  
+
+  - name: Install pre requisites for Harbor(docker)
+    dnf: 
+      name: "{{ packages }}"
+      state: present
+    vars:
+      packages:
+        - docker-ce 
+        - docker-ce-cli 
+        - containerd.io
+        - docker-compose
+    notify:
+      - docker start
+  
+  - name: Add docker in user vagrant
+    become: true
+    command:  groupadd docker && usermod -aG docker $USER
+
+  - name: Create folder Harbor
+    file: state=directory path=/harbor
+  
+  - name: Download Harbor 
+    get_url: 
+      url: https://github.com/goharbor/harbor/releases/download/v2.3.2/harbor-offline-installer-v2.3.2.tgz 
+      dest: /harbor/harbor-offline-installer-version.tgz
+      force: true
+      
+  - name: Unzip Harbor
+    unarchive: 
+      src: /harbor/harbor-offline-installer-version.tgz
+      dest: /
+  
+  - name: Exclude harbor file zip
+    file: state=absent path=/harbor/harbor-offline-installer-version.tgz
+  
+  - name: Execute harbor install sh
+    become: true
+    command: /harbor/harbor/install.sh
+# falta adicionar docker como usuario 
+# executar install.sh
+# criar harbor.yml
+
+  handlers:
+    - name: docker start
+      service: name=docker state=started
